@@ -31,6 +31,8 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLParameters;
 
 public class MainActivity extends Activity {
     private EditText hostInput, portInput, workerInput, passwordInput;
@@ -50,6 +52,7 @@ public class MainActivity extends Activity {
     private volatile long accepted = 0;
     private volatile long rejected = 0;
     private volatile long startTime = 0;
+    private volatile int nextSubmitId = 100;
     private volatile boolean authorized = false;
     private volatile String latestStatus = "آماده";
     private Thread networkThread;
@@ -114,7 +117,8 @@ public class MainActivity extends Activity {
         root.addView(passwordInput);
 
         tlsCheck = new CheckBox(this);
-        tlsCheck.setText("اتصال TLS امن (فقط اگر استخر این درگاه را پشتیبانی می‌کند)");
+        tlsCheck.setText("اتصال TLS امن (در صورت پشتیبانی استخر)");
+        tlsCheck.setChecked(true);
         tlsCheck.setTextColor(0xFF111827);
         root.addView(tlsCheck);
 
@@ -198,14 +202,20 @@ public class MainActivity extends Activity {
 
     private void networkLoop(String host, int port, String worker, String password, boolean tls) {
         try {
+            Socket plain = new Socket();
+            plain.connect(new InetSocketAddress(host, port), 15000);
             Socket s;
             if (tls) {
-                s = SSLSocketFactory.getDefault().createSocket();
+                SSLSocket secure = (SSLSocket) SSLSocketFactory.getDefault().createSocket(plain, host, port, true);
+                SSLParameters sslParameters = secure.getSSLParameters();
+                sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
+                secure.setSSLParameters(sslParameters);
+                secure.startHandshake();
+                s = secure;
             } else {
-                s = new Socket();
+                s = plain;
             }
             socket = s;
-            s.connect(new InetSocketAddress(host, port), 15000);
             s.setSoTimeout(1000);
             BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
             writer = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8));
@@ -242,6 +252,15 @@ public class MainActivity extends Activity {
                             if (miningThread == null || !miningThread.isAlive()) {
                                 miningThread = new Thread(this::miningLoop, "BTCPhone-miner");
                                 miningThread.start();
+                            }
+                        } else if (idObj instanceof Number && ((Number) idObj).intValue() >= 100) {
+                            boolean ok = msg.optBoolean("result", false);
+                            if (ok) {
+                                accepted++;
+                                append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\\n");
+                            } else {
+                                rejected++;
+                                append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\\n");
                             }
                         } else {
                             String method = msg.optString("method", "");
@@ -302,6 +321,7 @@ public class MainActivity extends Activity {
     }
 
     private void miningLoop() {
+        byte[] extranonce2 = new byte[extranonce2Size];
         while (running.get() && authorized) {
             Job job = currentJob;
             if (job == null) {
@@ -309,15 +329,16 @@ public class MainActivity extends Activity {
                 continue;
             }
             try {
-                byte[] extranonce2 = new byte[extranonce2Size];
                 boolean restart = false;
-                for (long nonce = 0; nonce <= 0xffffffffL && running.get() && authorized; nonce++) {
+                for (long nonce = 0; nonce < 100000L && running.get() && authorized; nonce++) {
                     if (currentJob != job) { restart = true; break; }
                     byte[] header = buildHeader(job, extranonce2, nonce);
                     byte[] hash = doubleSha(header);
                     hashesDone++;
                     BigInteger value = new BigInteger(1, reverse(hash));
-                    BigInteger target = DIFF1_TARGET.divide(BigDecimal.valueOf(shareDifficulty).setScale(12, RoundingMode.DOWN).toBigInteger().max(BigInteger.ONE));
+                    BigInteger target = new BigDecimal(DIFF1_TARGET)
+                        .divide(BigDecimal.valueOf(Math.max(shareDifficulty, 0.00000001)), 0, RoundingMode.DOWN)
+                        .toBigInteger();
                     if (value.compareTo(target) <= 0) {
                         String nonceHex = String.format(Locale.US, "%08x", nonce);
                         String en2 = bytesToHex(extranonce2);
@@ -332,7 +353,7 @@ public class MainActivity extends Activity {
                         break;
                     }
                 }
-                if (!restart && running.get()) increment(extranonce2);
+                if (!restart && running.get() && currentJob == job) increment(extranonce2);
                 if (currentJob == job) Thread.yield();
             } catch (Exception e) {
                 append("خطای محاسبه: " + e.getMessage() + "\n");
