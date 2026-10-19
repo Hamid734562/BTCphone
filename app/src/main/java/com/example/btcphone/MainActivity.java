@@ -206,7 +206,7 @@ public class MainActivity extends Activity {
             plain.connect(new InetSocketAddress(host, port), 15000);
             Socket s;
             if (tls) {
-                SSLSocket secure = (SSLSocket) SSLSocketFactory.getDefault().createSocket(plain, host, port, true);
+                SSLSocket secure = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault()).createSocket(plain, host, port, true);
                 SSLParameters sslParameters = secure.getSSLParameters();
                 sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
                 secure.setSSLParameters(sslParameters);
@@ -374,7 +374,7 @@ public class MainActivity extends Activity {
         byte[] ntime = reverse(hexToBytes(job.ntime));
         byte[] nbits = reverse(hexToBytes(job.nbits));
         byte[] nonceBytes = new byte[] {(byte) nonce, (byte)(nonce >>> 8), (byte)(nonce >>> 16), (byte)(nonce >>> 24)};
-        byte[] header = concat(version, prev, root, ntime, nbits, nonceBytes);
+        byte[] header = concat(concat(concat(concat(concat(version, prev), root), ntime), nbits), nonceBytes);
         if (header.length != 80) throw new Exception("طول هدر نامعتبر: " + header.length);
         return header;
     }
