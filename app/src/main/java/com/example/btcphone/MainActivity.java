@@ -502,8 +502,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        // Keep the session threads alive when the Activity is hidden; the foreground service
-        // is started with the session and raises process priority while Android backgrounds it.
+        stopMining("برنامه بسته شد.");
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         super.onDestroy();
     }
