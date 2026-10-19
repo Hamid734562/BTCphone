@@ -300,7 +300,7 @@ public class MainActivity extends Activity {
                     setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
                     if (now - lastDetailedLog > 10_000_000_000L) {
                         lastDetailedLog = now;
-                        append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سهم ارسال‌شده %d | پذیرفته %d | ردشده %d | شناسه کار %s\n", hashesDone, rate, submitted, accepted, rejected, jobId));
+                        append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سختی سهم %.4f | ارسال %d | پذیرفته %d | ردشده %d | شناسه کار %s\\nمیانگین آماری تا سهم بعدی با این سرعت: %s (تخمینی است، تضمین نیست).\\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, jobId, expectedShareTime(rate, shareDifficulty)));
                     }
                 }
             }
@@ -464,6 +464,16 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> { output.setText("خطا: "+e.getMessage()); testButton.setEnabled(true); connectButton.setEnabled(true); });
             }
         }, "BTCPhone-benchmark").start();
+    }
+
+    private String expectedShareTime(double rate, double difficulty) {
+        if (rate <= 0 || difficulty <= 0 || !Double.isFinite(rate) || !Double.isFinite(difficulty)) return "قابل محاسبه نیست";
+        double seconds = 4294967296.0 * difficulty / rate;
+        if (seconds < 60) return String.format(Locale.US, "%.1f ثانیه", seconds);
+        if (seconds < 3600) return String.format(Locale.US, "%.1f دقیقه", seconds / 60.0);
+        if (seconds < 86400) return String.format(Locale.US, "%.1f ساعت", seconds / 3600.0);
+        if (seconds < 31557600) return String.format(Locale.US, "%.1f روز", seconds / 86400.0);
+        return String.format(Locale.US, "%.1f سال", seconds / 31557600.0);
     }
 
     private void stopMining(String reason) {
