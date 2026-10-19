@@ -247,6 +247,7 @@ public class MainActivity extends Activity {
                         } else if (idObj instanceof Number && ((Number) idObj).intValue() == 2) {
                             authorized = msg.optBoolean("result", false);
                             if (!authorized) throw new Exception("استخر Worker را نپذیرفت؛ نام کارگر/رمز را بررسی کن");
+                            startTime = System.nanoTime();
                             setStatus("متصل و مجاز؛ منتظر کار استخر");
                             append("احراز هویت موفق شد. منتظر mining.notify هستیم.\n");
                             if (miningThread == null || !miningThread.isAlive()) {
