@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
     private volatile int extranonce2Size = 4;
     private volatile String workerName = "";
     private volatile long hashesDone = 0;
+    private volatile long submitted = 0;
     private volatile long accepted = 0;
     private volatile long rejected = 0;
     private volatile long startTime = 0;
@@ -187,6 +188,7 @@ public class MainActivity extends Activity {
         running.set(true);
         authorized = false;
         hashesDone = 0;
+        submitted = 0;
         accepted = 0;
         rejected = 0;
         startTime = System.nanoTime();
@@ -223,6 +225,7 @@ public class MainActivity extends Activity {
             boolean subscribed = false;
             boolean authSent = false;
             long lastUi = 0;
+            long lastDetailedLog = 0;
             while (running.get()) {
                 String line;
                 try {
@@ -258,10 +261,10 @@ public class MainActivity extends Activity {
                             boolean ok = msg.optBoolean("result", false);
                             if (ok) {
                                 accepted++;
-                                append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\\n");
+                                append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\n");
                             } else {
                                 rejected++;
-                                append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\\n");
+                                append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\n");
                             }
                         } else {
                             String method = msg.optString("method", "");
@@ -292,7 +295,13 @@ public class MainActivity extends Activity {
                     lastUi = now;
                     double seconds = (now - startTime) / 1_000_000_000.0;
                     double rate = seconds > 0 ? hashesDone / seconds : 0;
-                    setStatus(String.format(Locale.US, "هش آزمایشی: %,.0f H/s | پذیرفته: %d | ردشده: %d", rate, accepted, rejected));
+                    Job visibleJob = currentJob;
+                    String jobId = visibleJob == null ? "ندارد" : visibleJob.id;
+                    setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
+                    if (now - lastDetailedLog > 10_000_000_000L) {
+                        lastDetailedLog = now;
+                        append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سهم ارسال‌شده %d | پذیرفته %d | ردشده %d | شناسه کار %s\\n", hashesDone, rate, submitted, accepted, rejected, jobId));
+                    }
                 }
             }
         } catch (Exception e) {
