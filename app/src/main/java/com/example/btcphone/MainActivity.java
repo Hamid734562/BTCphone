@@ -358,7 +358,8 @@ public class MainActivity extends Activity {
                             + JSONObject.quote(en2) + "," + JSONObject.quote(job.ntime) + ","
                             + JSONObject.quote(nonceHex) + "]}";
                         sendJson(submit);
-                        append("سهم احتمالی ارسال شد؛ nonce=" + nonceHex + "\n");
+                        submitted++;
+                        append("سهم ارسال شد؛ nonce=" + nonceHex + " | مجموع ارسال: " + submitted + "\n");
                         increment(extranonce2);
                         restart = true;
                         break;
