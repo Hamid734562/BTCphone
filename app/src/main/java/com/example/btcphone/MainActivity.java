@@ -300,7 +300,7 @@ public class MainActivity extends Activity {
                     setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
                     if (now - lastDetailedLog > 10_000_000_000L) {
                         lastDetailedLog = now;
-                        append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سهم ارسال‌شده %d | پذیرفته %d | ردشده %d | شناسه کار %s\\n", hashesDone, rate, submitted, accepted, rejected, jobId));
+                        append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سهم ارسال‌شده %d | پذیرفته %d | ردشده %d | شناسه کار %s\n", hashesDone, rate, submitted, accepted, rejected, jobId));
                     }
                 }
             }
