@@ -59,6 +59,8 @@ public class MainActivity extends Activity {
     private volatile String latestStatus = "آماده";
     private Thread networkThread;
     private Thread miningThread;
+    // Reuse the SHA-256 engine on the mining thread to avoid allocating one per nonce.
+    private final ThreadLocal<MessageDigest> sha256Digest = new ThreadLocal<>();
 
     private static final BigInteger DIFF1_TARGET = new BigInteger(
         "00000000FFFF0000000000000000000000000000000000000000000000000000", 16
@@ -344,15 +346,22 @@ public class MainActivity extends Activity {
             }
             try {
                 boolean restart = false;
+                // The coinbase/merkle root stays the same for this extranonce2 batch.
+                // Compute it once instead of recalculating it for every nonce.
+                byte[] merkleRoot = buildMerkleRoot(job, extranonce2);
+                double batchDifficulty = shareDifficulty;
+                BigInteger target = new BigDecimal(DIFF1_TARGET)
+                    .divide(BigDecimal.valueOf(Math.max(batchDifficulty, 0.00000001)), 0, RoundingMode.DOWN)
+                    .toBigInteger();
                 for (long nonce = 0; nonce < 100000L && running.get() && authorized; nonce++) {
-                    if (currentJob != job) { restart = true; break; }
-                    byte[] header = buildHeader(job, extranonce2, nonce);
+                    if (currentJob != job || Double.compare(shareDifficulty, batchDifficulty) != 0) {
+                        restart = true;
+                        break;
+                    }
+                    byte[] header = buildHeader(job, merkleRoot, nonce);
                     byte[] hash = doubleSha(header);
                     hashesDone++;
                     BigInteger value = new BigInteger(1, reverse(hash));
-                    BigInteger target = new BigDecimal(DIFF1_TARGET)
-                        .divide(BigDecimal.valueOf(Math.max(shareDifficulty, 0.00000001)), 0, RoundingMode.DOWN)
-                        .toBigInteger();
                     if (value.compareTo(target) <= 0) {
                         String nonceHex = String.format(Locale.US, "%08x", nonce);
                         String en2 = bytesToHex(extranonce2);
@@ -378,12 +387,16 @@ public class MainActivity extends Activity {
         }
     }
 
-    private byte[] buildHeader(Job job, byte[] extranonce2, long nonce) throws Exception {
+    private byte[] buildMerkleRoot(Job job, byte[] extranonce2) throws Exception {
         byte[] coinbase = hexToBytes(job.coinb1 + extranonce1 + bytesToHex(extranonce2) + job.coinb2);
         byte[] merkle = doubleSha(coinbase);
         for (String branch : job.branches) merkle = doubleSha(concat(merkle, hexToBytes(branch)));
+        return merkle;
+    }
+
+    private byte[] buildHeader(Job job, byte[] merkleRoot, long nonce) throws Exception {
         byte[] prev = reverseWords4(hexToBytes(job.prevHash));
-        byte[] root = reverse(merkle);
+        byte[] root = reverse(merkleRoot);
         byte[] version = reverse(hexToBytes(job.version));
         byte[] ntime = reverse(hexToBytes(job.ntime));
         byte[] nbits = reverse(hexToBytes(job.nbits));
@@ -394,7 +407,12 @@ public class MainActivity extends Activity {
     }
 
     private byte[] doubleSha(byte[] data) throws Exception {
-        MessageDigest d = MessageDigest.getInstance("SHA-256");
+        MessageDigest d = sha256Digest.get();
+        if (d == null) {
+            d = MessageDigest.getInstance("SHA-256");
+            sha256Digest.set(d);
+        }
+        // MessageDigest.digest() resets the instance after each digest.
         return d.digest(d.digest(data));
     }
 
