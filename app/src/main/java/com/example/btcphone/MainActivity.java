@@ -396,7 +396,8 @@ public class MainActivity extends Activity {
 
     private byte[] buildHeader(Job job, byte[] merkleRoot, long nonce) throws Exception {
         byte[] prev = reverseWords4(hexToBytes(job.prevHash));
-        byte[] root = reverse(merkleRoot);
+        // Stratum V1 merkle calculation already yields header byte order; do not reverse it.
+        byte[] root = merkleRoot;
         byte[] version = reverse(hexToBytes(job.version));
         byte[] ntime = reverse(hexToBytes(job.ntime));
         byte[] nbits = reverse(hexToBytes(job.nbits));
