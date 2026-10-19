@@ -18,11 +18,9 @@ jobs:
           java-version: '17'
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-          # Let the action configure sdkmanager and accept licenses only.
-      - name: Install Android platform and build tools
-        run: |
-          sdkmanager --install "platforms;android-35"
-          sdkmanager --install "build-tools;35.0.0"
+        with:
+          accept-android-sdk-licenses: true
+          packages: "platforms;android-35,build-tools;35.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
