@@ -1,6 +1,7 @@
 package com.example.btcphone;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.graphics.Typeface;
 import android.view.Gravity;
@@ -185,6 +186,9 @@ public class MainActivity extends Activity {
             return;
         }
         workerName = worker;
+        Intent serviceIntent = new Intent(this, MiningForegroundService.class);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent);
+        else startService(serviceIntent);
         running.set(true);
         authorized = false;
         hashesDone = 0;
@@ -481,6 +485,7 @@ public class MainActivity extends Activity {
         authorized = false;
         currentJob = null;
         try { if (socket != null) socket.close(); } catch (Exception ignored) {}
+        try { stopService(new Intent(this, MiningForegroundService.class)); } catch (Exception ignored) {}
         setStatus(reason);
         append(reason + "\n");
         connectButton.setEnabled(true);
@@ -502,7 +507,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        stopMining("برنامه بسته شد.");
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         super.onDestroy();
     }
