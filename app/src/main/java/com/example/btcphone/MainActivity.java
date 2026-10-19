@@ -507,7 +507,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        stopMining("برنامه بسته شد.");
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         super.onDestroy();
     }
