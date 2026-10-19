@@ -342,7 +342,8 @@ public class MainActivity extends Activity {
                     if (value.compareTo(target) <= 0) {
                         String nonceHex = String.format(Locale.US, "%08x", nonce);
                         String en2 = bytesToHex(extranonce2);
-                        String submit = "{\"id\":null,\"method\":\"mining.submit\",\"params\":["
+                        int submitId = nextSubmitId++;
+                        String submit = "{\"id\":" + submitId + ",\"method\":\"mining.submit\",\"params\":["
                             + JSONObject.quote(workerName) + "," + JSONObject.quote(job.id) + ","
                             + JSONObject.quote(en2) + "," + JSONObject.quote(job.ntime) + ","
                             + JSONObject.quote(nonceHex) + "]}";
