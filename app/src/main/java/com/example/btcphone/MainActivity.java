@@ -357,6 +357,13 @@ public class MainActivity extends Activity {
     }
 
     private void miningLoop() {
+        final MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (Exception e) {
+            append("راه‌اندازی SHA-256 ناموفق بود: " + e.getMessage() + "\n");
+            return;
+        }
         byte[] extranonce2 = new byte[extranonce2Size];
         while (running.get() && authorized) {
             Job job = currentJob;
@@ -365,21 +372,37 @@ public class MainActivity extends Activity {
                 continue;
             }
             try {
+                // The coinbase and merkle root only change when extranonce2 changes,
+                // not for every nonce. Build the 80-byte header once per batch.
+                byte[] header = buildHeader(job, extranonce2, 0);
                 boolean restart = false;
+                double difficultyUsed = shareDifficulty;
+                BigInteger target = targetForDifficulty(difficultyUsed);
                 for (long nonce = 0; nonce < 100000L && running.get() && authorized; nonce++) {
                     if (currentJob != job) { restart = true; break; }
-                    byte[] header = buildHeader(job, extranonce2, nonce);
-                    byte[] hash = doubleSha(header);
+
+                    double currentDifficulty = shareDifficulty;
+                    if (currentDifficulty != difficultyUsed) {
+                        difficultyUsed = currentDifficulty;
+                        target = targetForDifficulty(difficultyUsed);
+                    }
+
+                    // Nonce is the final 4 bytes of the block header, little-endian.
+                    header[76] = (byte) nonce;
+                    header[77] = (byte) (nonce >>> 8);
+                    header[78] = (byte) (nonce >>> 16);
+                    header[79] = (byte) (nonce >>> 24);
+
+                    byte[] firstHash = digest.digest(header);
+                    byte[] hash = digest.digest(firstHash);
                     hashesDone++;
+
                     BigInteger value = new BigInteger(1, reverse(hash));
-                    BigInteger target = new BigDecimal(DIFF1_TARGET)
-                        .divide(BigDecimal.valueOf(Math.max(shareDifficulty, 0.00000001)), 0, RoundingMode.DOWN)
-                        .toBigInteger();
                     if (value.compareTo(target) <= 0) {
                         String nonceHex = String.format(Locale.US, "%08x", nonce);
                         String en2 = bytesToHex(extranonce2);
                         int submitId = nextSubmitId++;
-                        String submit = "{\"id\":" + submitId + ",\"method\":\"mining.submit\",\"params\":["
+                        String submit = "{\\"id\\":" + submitId + ",\\"method\\":\\"mining.submit\\",\\"params\\":[" 
                             + JSONObject.quote(workerName) + "," + JSONObject.quote(job.id) + ","
                             + JSONObject.quote(en2) + "," + JSONObject.quote(job.ntime) + ","
                             + JSONObject.quote(nonceHex) + "]}";
@@ -398,6 +421,13 @@ public class MainActivity extends Activity {
                 try { Thread.sleep(250); } catch (InterruptedException ignored) {}
             }
         }
+    }
+
+    private BigInteger targetForDifficulty(double difficulty) {
+        double safeDifficulty = Math.max(difficulty, 0.00000001);
+        return new BigDecimal(DIFF1_TARGET)
+            .divide(BigDecimal.valueOf(safeDifficulty), 0, RoundingMode.DOWN)
+            .toBigInteger();
     }
 
     private byte[] buildHeader(Job job, byte[] extranonce2, long nonce) throws Exception {
