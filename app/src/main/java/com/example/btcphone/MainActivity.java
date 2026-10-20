@@ -488,7 +488,7 @@ public class MainActivity extends Activity {
                     hashesDone++;
 
                     if (hashMeetsTarget(hash, targetBytes)) {
-                        String nonceHex = String.format(Locale.US, "%08x", nonce);
+                        String nonceHex = bytesToHex(new byte[] {(byte) nonce, (byte) (nonce >>> 8), (byte) (nonce >>> 16), (byte) (nonce >>> 24)});
                         String en2 = bytesToHex(extranonce2);
                         int submitId = nextSubmitId++;
                         String submit = "{\"id\":" + submitId + ",\"method\":\"mining.submit\",\"params\":["
