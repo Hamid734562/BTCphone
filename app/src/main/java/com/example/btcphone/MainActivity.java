@@ -29,6 +29,9 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.SSLSocketFactory;
@@ -53,6 +56,9 @@ public class MainActivity extends Activity {
     private volatile long submitted = 0;
     private volatile long accepted = 0;
     private volatile long rejected = 0;
+    private volatile long submissionErrors = 0;
+    private volatile long unconfirmed = 0;
+    private final Set<Integer> pendingSubmitIds = Collections.synchronizedSet(new HashSet<>());
     private volatile long startTime = 0;
     private volatile int nextSubmitId = 100;
     private volatile boolean authorized = false;
@@ -197,6 +203,9 @@ public class MainActivity extends Activity {
         submitted = 0;
         accepted = 0;
         rejected = 0;
+        submissionErrors = 0;
+        unconfirmed = 0;
+        pendingSubmitIds.clear();
         startTime = System.nanoTime();
         currentJob = null;
         connectButton.setEnabled(false);
@@ -271,13 +280,28 @@ public class MainActivity extends Activity {
                                     miningThread.start();
                                 }
                             } else if (idObj instanceof Number && ((Number) idObj).intValue() >= 100) {
-                                boolean ok = msg.optBoolean("result", false);
-                                if (ok) {
-                                    accepted++;
-                                    append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\n");
+                                int responseId = ((Number) idObj).intValue();
+                                if (!pendingSubmitIds.remove(responseId)) {
+                                    append("پاسخ با شناسه ناشناخته/تکراری نادیده گرفته شد: " + responseId + "\n");
                                 } else {
-                                    rejected++;
-                                    append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\n");
+                                    Object resultValue = msg.opt("result");
+                                    Object errorValue = msg.opt("error");
+                                    boolean hasError = errorValue != null && errorValue != JSONObject.NULL;
+                                    if (resultValue instanceof Boolean) {
+                                        if ((Boolean) resultValue && !hasError) {
+                                            accepted++;
+                                            append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\n");
+                                        } else {
+                                            rejected++;
+                                            append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + (hasError ? " | خطا: " + errorValue : "") + "\n");
+                                        }
+                                    } else if (hasError) {
+                                        rejected++;
+                                        append("استخر درخواست سهم را با خطا رد کرد. مجموع ردشده: " + rejected + " | خطا: " + errorValue + "\n");
+                                    } else {
+                                        unconfirmed++;
+                                        append("پاسخ سهم قالب معتبر ندارد؛ ردشده محسوب نشد. شناسه: " + responseId + "\n");
+                                    }
                                 }
                             } else {
                                 String methodName = msg.optString("method", "");
@@ -321,10 +345,10 @@ public class MainActivity extends Activity {
                         double rate = seconds > 0 ? hashesDone / seconds : 0;
                         Job visibleJob = currentJob;
                         String jobId = visibleJob == null ? "ندارد" : visibleJob.id;
-                        setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
+                        setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d | بی‌پاسخ: %d", rate, hashesDone, submitted, accepted, rejected, unconfirmed + pendingSubmitIds.size()));
                         if (now - lastDetailedLog > 10_000_000_000L) {
                             lastDetailedLog = now;
-                            append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سختی سهم %.4f | ارسال %d | پذیرفته %d | ردشده %d | شناسه کار %s\nتخمین آماری زمان یک سهم با سختی فعلی: %s (ممکن است سال‌ها باشد؛ زمان پیدا کردن بلوک نیست و شمارش معکوس نیست).\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, jobId, expectedShareTime(rate, shareDifficulty)));
+                            append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سختی سهم %.4f | ارسال موفق %d | پذیرفته %d | ردشده %d | ارسال ناموفق %d | بی‌پاسخ/نامشخص %d | در انتظار پاسخ %d | شناسه کار %s\nتخمین آماری زمان یک سهم با سختی فعلی: %s (ممکن است سال‌ها باشد؛ زمان پیدا کردن بلوک نیست و شمارش معکوس نیست).\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, submissionErrors, unconfirmed, pendingSubmitIds.size(), jobId, expectedShareTime(rate, shareDifficulty)));
                         }
                     }
                 }
@@ -336,6 +360,14 @@ public class MainActivity extends Activity {
             } finally {
                 authorized = false;
                 currentJob = null;
+                synchronized (pendingSubmitIds) {
+                    if (!pendingSubmitIds.isEmpty()) {
+                        long lost = pendingSubmitIds.size();
+                        unconfirmed += lost;
+                        pendingSubmitIds.clear();
+                        append("اتصال پایان یافت؛ " + lost + " سهم بدون پاسخ تأیید/رد ماندند.\n");
+                    }
+                }
                 try { if (activeSocket != null) activeSocket.close(); } catch (Exception ignored) {}
                 if (socket == activeSocket) socket = null;
                 writer = null;
@@ -423,9 +455,17 @@ public class MainActivity extends Activity {
                             + JSONObject.quote(workerName) + "," + JSONObject.quote(job.id) + ","
                             + JSONObject.quote(en2) + "," + JSONObject.quote(job.ntime) + ","
                             + JSONObject.quote(nonceHex) + "]}";
-                        sendJson(submit);
-                        submitted++;
-                        append("سهم ارسال شد؛ nonce=" + nonceHex + " | مجموع ارسال: " + submitted + "\n");
+                        pendingSubmitIds.add(submitId);
+                        try {
+                            sendJson(submit);
+                            submitted++;
+                            append("درخواست سهم ارسال شد؛ nonce=" + nonceHex + " | ارسال موفق: " + submitted + " | در انتظار پاسخ: " + pendingSubmitIds.size() + "\n");
+                        } catch (Exception sendError) {
+                            pendingSubmitIds.remove(submitId);
+                            submissionErrors++;
+                            append("ارسال سهم ناموفق بود: " + sendError.getMessage() + " | مجموع خطای ارسال: " + submissionErrors + "\n");
+                            throw sendError;
+                        }
                         increment(extranonce2);
                         restart = true;
                         break;
