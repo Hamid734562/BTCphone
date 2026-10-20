@@ -320,7 +320,7 @@ public class MainActivity extends Activity {
                     double rate = seconds > 0 ? hashesDone / seconds : 0;
                     Job visibleJob = currentJob;
                     String jobId = visibleJob == null ? "ندارد" : visibleJob.id;
-                    setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
+                    setStatus(String.format(Locale.US, "هش: %,.0f H/s | سختی: %.0f | زمان متوسط سهم: %s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, shareDifficulty, expectedShareTime(rate, shareDifficulty), hashesDone, submitted, accepted, rejected));
                     if (now - lastDetailedLog > 30_000_000_000L) {
                         lastDetailedLog = now;
                         String note = submitted == 0
