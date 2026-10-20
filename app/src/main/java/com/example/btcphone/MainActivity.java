@@ -466,7 +466,8 @@ public class MainActivity extends Activity {
         byte[] merkle = doubleSha(coinbase);
         for (String branch : job.branches) merkle = doubleSha(concat(merkle, hexToBytes(branch)));
         byte[] prev = reverseWords4(hexToBytes(job.prevHash));
-        byte[] root = reverse(merkle);
+        // Stratum V1 merkle hashing produces the 32-byte root in header serialization order.
+        byte[] root = merkle;
         byte[] version = reverse(hexToBytes(job.version));
         byte[] ntime = reverse(hexToBytes(job.ntime));
         byte[] nbits = reverse(hexToBytes(job.nbits));
