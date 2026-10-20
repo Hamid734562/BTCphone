@@ -399,16 +399,23 @@ public class MainActivity extends Activity {
                 BigInteger target = new BigDecimal(DIFF1_TARGET)
                     .divide(BigDecimal.valueOf(Math.max(batchDifficulty, 0.00000001)), 0, RoundingMode.DOWN)
                     .toBigInteger();
+                boolean everyHashQualifies = target.bitLength() > 256;
+                byte[] targetBytes = everyHashQualifies ? null : toFixed32(target);
+                // Build the 80-byte header once per batch; only its 4-byte nonce changes.
+                byte[] header = buildHeader(job, merkleRoot, 0);
                 for (long nonce = 0; nonce < 100000L && running.get() && authorized; nonce++) {
                     if (currentJob != job || Double.compare(shareDifficulty, batchDifficulty) != 0) {
                         restart = true;
                         break;
                     }
-                    byte[] header = buildHeader(job, merkleRoot, nonce);
+                    int n = (int) nonce;
+                    header[76] = (byte) n;
+                    header[77] = (byte) (n >>> 8);
+                    header[78] = (byte) (n >>> 16);
+                    header[79] = (byte) (n >>> 24);
                     byte[] hash = doubleSha(header);
                     hashesDone++;
-                    BigInteger value = new BigInteger(1, reverse(hash));
-                    if (value.compareTo(target) <= 0) {
+                    if (everyHashQualifies || hashMeetsTarget(hash, targetBytes)) {
                         String nonceHex = String.format(Locale.US, "%08x", nonce);
                         String en2 = bytesToHex(extranonce2);
                         int submitId = nextSubmitId++;
@@ -431,6 +438,28 @@ public class MainActivity extends Activity {
                 try { Thread.sleep(250); } catch (InterruptedException ignored) {}
             }
         }
+    }
+
+    // Convert a non-negative target into exactly 32 big-endian bytes.
+    private byte[] toFixed32(BigInteger value) {
+        byte[] raw = value.toByteArray();
+        byte[] out = new byte[32];
+        int src = Math.max(0, raw.length - 32);
+        int len = Math.min(32, raw.length);
+        System.arraycopy(raw, src, out, 32 - len, len);
+        return out;
+    }
+
+    // Bitcoin interprets the displayed hash in reverse byte order. Compare bytes directly
+    // to avoid allocating a BigInteger for every nonce.
+    private boolean hashMeetsTarget(byte[] hash, byte[] targetBytes) {
+        for (int i = 0; i < 32; i++) {
+            int hashByte = hash[31 - i] & 0xff;
+            int targetByte = targetBytes[i] & 0xff;
+            if (hashByte < targetByte) return true;
+            if (hashByte > targetByte) return false;
+        }
+        return true;
     }
 
     private byte[] buildMerkleRoot(Job job, byte[] extranonce2, String batchExtranonce1) throws Exception {
