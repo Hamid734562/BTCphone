@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
         root.addView(intro);
 
         TextView warning = new TextView(this);
-        warning.setText("هشدار: استخراج با گوشی معمولاً درآمد ناچیز یا صفر دارد و می‌تواند گوشی را داغ و باتری را فرسوده کند. فقط از استخر مورداعتماد استفاده کن. اتصال بدون TLS رمزگذاری نشده است. این نسخه آزمایشی است و قبل از استفاده جدی باید با استخر واقعی آزموده شود.");
+        warning.setText("نسخهٔ آزمایشی: اتصال و هش محلی به معنی سهم پذیرفته‌شده نیست. اگر گوشی داغ شد یا سرعت افت کرد، توقف کن. هش‌ریت استخر فقط پس از پذیرش سهم ثبت می‌شود.");
         warning.setTextColor(0xFF9A3412);
         warning.setTextSize(13);
         warning.setPadding(12, 12, 12, 12);
@@ -321,9 +321,12 @@ public class MainActivity extends Activity {
                     Job visibleJob = currentJob;
                     String jobId = visibleJob == null ? "ندارد" : visibleJob.id;
                     setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
-                    if (now - lastDetailedLog > 10_000_000_000L) {
+                    if (now - lastDetailedLog > 30_000_000_000L) {
                         lastDetailedLog = now;
-                        append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سختی سهم %.4f | ارسال %d | پذیرفته %d | ردشده %d | شناسه کار %s\nتخمین آماری زمان یک سهم با سختی فعلی: %s (ممکن است سال‌ها باشد؛ زمان پیدا کردن بلوک نیست و شمارش معکوس نیست).\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, jobId, expectedShareTime(rate, shareDifficulty)));
+                        String note = submitted == 0
+                            ? " | هنوز سهمی ارسال نشده؛ اتصال به‌تنهایی استخراج تأییدشده نیست"
+                            : (accepted == 0 ? " | منتظر پاسخ استخر به سهم‌ها" : " | استخر سهم پذیرفته است");
+                        append(String.format(Locale.US, "گزارش: هش %,d | سرعت %,.0f H/s | سختی %.0f | ارسال %d | قبول %d | رد %d | کار %s%s\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, jobId, note));
                     }
                 }
             }
