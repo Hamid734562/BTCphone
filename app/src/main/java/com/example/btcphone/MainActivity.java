@@ -198,6 +198,26 @@ public class MainActivity extends Activity {
             append("خطا در آزمون داخلی هش: " + e.getMessage() + "\n");
             return;
         }
+        try {
+            byte[] genesisHeader = hexToBytes(
+                "01000000" +
+                "0000000000000000000000000000000000000000000000000000000000000000" +
+                "3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a" +
+                "29ab5f49ffff001d1dac2b7c"
+            );
+            String genesisHash = bytesToHex(doubleSha(genesisHeader));
+            String expectedGenesisHash = "6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000";
+            if (genesisHeader.length != 80 || !expectedGenesisHash.equals(genesisHash)
+                || !hashMeetsTarget(doubleSha(genesisHeader), targetBytesForDifficulty(1.0))) {
+                append("آزمون مرجع هدر بیت‌کوین ناموفق شد؛ استخراج شروع نشد. هش محاسبه‌شده: " + genesisHash + "\\n");
+                Toast.makeText(this, "آزمون هدر/هدف استخراج ناموفق بود.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            append("آزمون مرجع هدر بیت‌کوین و مقایسه هدف موفق شد. این آزمون ساخت Merkle از پیام استخر را جداگانه تضمین نمی‌کند.\\n");
+        } catch (Exception e) {
+            append("خطا در آزمون مرجع استخراج: " + e.getMessage() + "\\n");
+            return;
+        }
         workerName = worker;
         Intent serviceIntent = new Intent(this, MiningForegroundService.class);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent);
