@@ -209,136 +209,156 @@ public class MainActivity extends Activity {
     }
 
     private void networkLoop(String host, int port, String worker, String password, boolean tls) {
-        try {
-            Socket plain = new Socket();
-            plain.connect(new InetSocketAddress(host, port), 15000);
-            Socket s;
-            if (tls) {
-                SSLSocket secure = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault()).createSocket(plain, host, port, true);
-                SSLParameters sslParameters = secure.getSSLParameters();
-                sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
-                secure.setSSLParameters(sslParameters);
-                secure.startHandshake();
-                s = secure;
-            } else {
-                s = plain;
-            }
-            socket = s;
-            s.setSoTimeout(1000);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
-            writer = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8));
-            sendJson("{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[\"BTCPhone/1.3\"]}");
-            boolean subscribed = false;
-            boolean authSent = false;
-            long lastUi = 0;
-            long lastDetailedLog = 0;
-            while (running.get()) {
-                String line;
-                try {
-                    line = reader.readLine();
-                } catch (java.net.SocketTimeoutException timeout) {
-                    line = null;
+        while (running.get()) {
+            Socket activeSocket = null;
+            try {
+                Socket plain = new Socket();
+                plain.connect(new InetSocketAddress(host, port), 15000);
+                Socket s;
+                if (tls) {
+                    SSLSocket secure = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault()).createSocket(plain, host, port, true);
+                    SSLParameters sslParameters = secure.getSSLParameters();
+                    sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
+                    secure.setSSLParameters(sslParameters);
+                    secure.startHandshake();
+                    s = secure;
+                } else {
+                    s = plain;
                 }
-                if (line != null) {
+                activeSocket = s;
+                socket = s;
+                s.setSoTimeout(1000);
+                BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
+                writer = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8));
+                currentJob = null;
+                authorized = false;
+                sendJson("{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[\"BTCPhone/1.3\"]}");
+                long lastUi = 0;
+                long lastDetailedLog = 0;
+                append("اتصال برقرار شد؛ درخواست subscribe ارسال شد.\n");
+                while (running.get()) {
+                    String line = null;
+                    boolean timedOut = false;
                     try {
-                        JSONObject msg = new JSONObject(line);
-                        Object idObj = msg.opt("id");
-                        if (idObj instanceof Number && ((Number) idObj).intValue() == 1) {
-                            JSONArray result = msg.optJSONArray("result");
-                            if (result == null || result.length() < 3) throw new Exception("پاسخ subscribe نامعتبر است");
-                            extranonce1 = result.getString(1);
-                            extranonce2Size = result.getInt(2);
-                            if (extranonce2Size < 1 || extranonce2Size > 16) throw new Exception("اندازه extranonce2 پشتیبانی نمی‌شود");
-                            subscribed = true;
-                            sendJson("{\"id\":2,\"method\":\"mining.authorize\",\"params\":[" + JSONObject.quote(worker) + "," + JSONObject.quote(password) + "]}");
-                            authSent = true;
-                            append("اشتراک Stratum دریافت شد؛ در حال احراز هویت Worker...\n");
-                        } else if (idObj instanceof Number && ((Number) idObj).intValue() == 2) {
-                            authorized = msg.optBoolean("result", false);
-                            if (!authorized) throw new Exception("استخر Worker را نپذیرفت؛ نام کارگر/رمز را بررسی کن");
-                            startTime = System.nanoTime();
-                            setStatus("متصل و مجاز؛ منتظر کار استخر");
-                            append("احراز هویت موفق شد. منتظر mining.notify هستیم.\n");
-                            if (miningThread == null || !miningThread.isAlive()) {
-                                miningThread = new Thread(this::miningLoop, "BTCPhone-miner");
-                                miningThread.start();
-                            }
-                        } else if (idObj instanceof Number && ((Number) idObj).intValue() >= 100) {
-                            boolean ok = msg.optBoolean("result", false);
-                            if (ok) {
-                                accepted++;
-                                append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\n");
-                            } else {
-                                rejected++;
-                                append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\n");
-                            }
-                        } else {
-                            String method = msg.optString("method", "");
-                            JSONArray params = msg.optJSONArray("params");
-                            if ("mining.set_difficulty".equals(method) && params != null && params.length() > 0) {
-                                double d = params.getDouble(0);
-                                if (d > 0 && Double.isFinite(d)) shareDifficulty = d;
-                                append("سختی سهم اعلام‌شده استخر: " + shareDifficulty + "\n");
-                            } else if ("mining.set_extranonce".equals(method) && params != null && params.length() >= 2) {
-                                String newExtranonce1 = params.getString(0);
-                                int newExtranonce2Size = params.getInt(1);
-                                if ((newExtranonce1.length() & 1) != 0 || newExtranonce2Size < 1 || newExtranonce2Size > 16) {
-                                    throw new Exception("پیام set_extranonce نامعتبر است");
+                        line = reader.readLine();
+                    } catch (java.net.SocketTimeoutException timeout) {
+                        timedOut = true;
+                    }
+                    // readLine() returns null on EOF; a timeout is handled separately above.
+                    if (line == null && !timedOut) {
+                        throw new Exception("استخر اتصال را بست (EOF)");
+                    }
+                    if (line != null) {
+                        try {
+                            JSONObject msg = new JSONObject(line);
+                            Object idObj = msg.opt("id");
+                            if (idObj instanceof Number && ((Number) idObj).intValue() == 1) {
+                                JSONArray result = msg.optJSONArray("result");
+                                if (result == null || result.length() < 3) throw new Exception("پاسخ subscribe نامعتبر است");
+                                extranonce1 = result.getString(1);
+                                extranonce2Size = result.getInt(2);
+                                if (extranonce2Size < 1 || extranonce2Size > 16) throw new Exception("اندازه extranonce2 پشتیبانی نمی‌شود");
+                                sendJson("{\"id\":2,\"method\":\"mining.authorize\",\"params\":[" + JSONObject.quote(worker) + "," + JSONObject.quote(password) + "]}");
+                                append("اشتراک Stratum دریافت شد؛ در حال احراز هویت Worker...\n");
+                            } else if (idObj instanceof Number && ((Number) idObj).intValue() == 2) {
+                                authorized = msg.optBoolean("result", false);
+                                if (!authorized) throw new Exception("استخر Worker را نپذیرفت؛ نام کارگر/رمز را بررسی کن");
+                                startTime = System.nanoTime();
+                                setStatus("متصل و مجاز؛ منتظر کار استخر");
+                                append("احراز هویت موفق شد. منتظر mining.notify هستیم.\n");
+                                if (miningThread == null || !miningThread.isAlive()) {
+                                    miningThread = new Thread(this::miningLoop, "BTCPhone-miner");
+                                    miningThread.start();
                                 }
-                                // Validate that extranonce1 is hexadecimal before accepting it.
-                                hexToBytes(newExtranonce1);
-                                extranonce1 = newExtranonce1;
-                                extranonce2Size = newExtranonce2Size;
-                                currentJob = null;
-                                append("پارامترهای extranonce از استخر به‌روزرسانی شد؛ منتظر کار جدید هستیم.\\n");
-                            } else if ("mining.notify".equals(method) && params != null && params.length() >= 9) {
-                                String[] branches = new String[params.getJSONArray(4).length()];
-                                JSONArray b = params.getJSONArray(4);
-                                for (int i = 0; i < b.length(); i++) branches[i] = b.getString(i);
-                                Job job = new Job(params.getString(0), params.getString(1), params.getString(2),
-                                    params.getString(3), branches, params.getString(5), params.getString(6),
-                                    params.getString(7), params.getBoolean(8));
-                                currentJob = job;
-                                append("کار جدید استخر دریافت شد: " + job.id + "\n");
-                                setStatus("کار استخر دریافت شد؛ آماده محاسبه");
+                            } else if (idObj instanceof Number && ((Number) idObj).intValue() >= 100) {
+                                boolean ok = msg.optBoolean("result", false);
+                                if (ok) {
+                                    accepted++;
+                                    append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\n");
+                                } else {
+                                    rejected++;
+                                    append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\n");
+                                }
+                            } else {
+                                String methodName = msg.optString("method", "");
+                                JSONArray params = msg.optJSONArray("params");
+                                if ("mining.set_difficulty".equals(methodName) && params != null && params.length() > 0) {
+                                    double d = params.getDouble(0);
+                                    if (d > 0 && Double.isFinite(d)) shareDifficulty = d;
+                                    append("سختی سهم اعلام‌شده استخر: " + shareDifficulty + "\n");
+                                } else if ("mining.set_extranonce".equals(methodName) && params != null && params.length() >= 2) {
+                                    String newExtranonce1 = params.getString(0);
+                                    int newExtranonce2Size = params.getInt(1);
+                                    if ((newExtranonce1.length() & 1) != 0 || newExtranonce2Size < 1 || newExtranonce2Size > 16) {
+                                        throw new Exception("پیام set_extranonce نامعتبر است");
+                                    }
+                                    hexToBytes(newExtranonce1);
+                                    extranonce1 = newExtranonce1;
+                                    extranonce2Size = newExtranonce2Size;
+                                    currentJob = null;
+                                    append("پارامترهای extranonce از استخر به‌روزرسانی شد؛ منتظر کار جدید هستیم.\n");
+                                } else if ("mining.notify".equals(methodName) && params != null && params.length() >= 9) {
+                                    String[] branches = new String[params.getJSONArray(4).length()];
+                                    JSONArray b = params.getJSONArray(4);
+                                    for (int i = 0; i < b.length(); i++) branches[i] = b.getString(i);
+                                    Job job = new Job(params.getString(0), params.getString(1), params.getString(2),
+                                        params.getString(3), branches, params.getString(5), params.getString(6),
+                                        params.getString(7), params.getBoolean(8));
+                                    currentJob = job;
+                                    append("کار جدید استخر دریافت شد: " + job.id + "\n");
+                                    setStatus("کار استخر دریافت شد؛ آماده محاسبه");
+                                }
                             }
+                        } catch (Exception parseError) {
+                            append("پیام/خطای استخر: " + parseError.getMessage() + "\n");
+                            if (line.contains("\"id\":2") || line.contains("\"id\": 2")) throw parseError;
                         }
-                    } catch (Exception parseError) {
-                        append("پیام/خطای استخر: " + parseError.getMessage() + "\n");
-                        if (line.contains("\"id\":2") || line.contains("\"id\": 2")) throw parseError;
+                    }
+                    long now = System.nanoTime();
+                    if (now - lastUi > 2_000_000_000L && authorized) {
+                        lastUi = now;
+                        double seconds = (now - startTime) / 1_000_000_000.0;
+                        double rate = seconds > 0 ? hashesDone / seconds : 0;
+                        Job visibleJob = currentJob;
+                        String jobId = visibleJob == null ? "ندارد" : visibleJob.id;
+                        setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
+                        if (now - lastDetailedLog > 10_000_000_000L) {
+                            lastDetailedLog = now;
+                            append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سختی سهم %.4f | ارسال %d | پذیرفته %d | ردشده %d | شناسه کار %s\nتخمین آماری زمان یک سهم با سختی فعلی: %s (ممکن است سال‌ها باشد؛ زمان پیدا کردن بلوک نیست و شمارش معکوس نیست).\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, jobId, expectedShareTime(rate, shareDifficulty)));
+                        }
                     }
                 }
-                long now = System.nanoTime();
-                if (now - lastUi > 2_000_000_000L && authorized) {
-                    lastUi = now;
-                    double seconds = (now - startTime) / 1_000_000_000.0;
-                    double rate = seconds > 0 ? hashesDone / seconds : 0;
-                    Job visibleJob = currentJob;
-                    String jobId = visibleJob == null ? "ندارد" : visibleJob.id;
-                    setStatus(String.format(Locale.US, "هش: %,.0f H/s | کل هش: %,d | ارسال: %d | قبول: %d | رد: %d", rate, hashesDone, submitted, accepted, rejected));
-                    if (now - lastDetailedLog > 10_000_000_000L) {
-                        lastDetailedLog = now;
-                        append(String.format(Locale.US, "گزارش زنده: هش کل %,d | سرعت %,.0f H/s | سختی سهم %.4f | ارسال %d | پذیرفته %d | ردشده %d | شناسه کار %s\\nتخمین آماری زمان یک سهم با سختی فعلی: %s (ممکن است سال‌ها باشد؛ زمان پیدا کردن بلوک نیست و شمارش معکوس نیست).\\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, jobId, expectedShareTime(rate, shareDifficulty)));
-                    }
+            } catch (Exception e) {
+                if (running.get()) {
+                    append("اتصال قطع شد: " + e.getMessage() + "\n");
+                    setStatus("اتصال قطع شد؛ تلاش مجدد انجام می‌شود");
                 }
+            } finally {
+                authorized = false;
+                currentJob = null;
+                try { if (activeSocket != null) activeSocket.close(); } catch (Exception ignored) {}
+                if (socket == activeSocket) socket = null;
+                writer = null;
             }
-        } catch (Exception e) {
             if (running.get()) {
-                append("اتصال قطع شد: " + e.getMessage() + "\n");
-                setStatus("اتصال ناموفق یا قطع‌شده");
+                append("تلاش برای اتصال مجدد تا ۳ ثانیه دیگر...\n");
+                setStatus("در انتظار اتصال مجدد...");
+                try { Thread.sleep(3000); } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
-        } finally {
-            running.set(false);
-            authorized = false;
-            try { if (socket != null) socket.close(); } catch (Exception ignored) {}
-            socket = null;
-            writer = null;
-            runOnUiThread(() -> {
-                connectButton.setEnabled(true);
-                stopButton.setEnabled(false);
-                testButton.setEnabled(true);
-            });
         }
+        running.set(false);
+        authorized = false;
+        try { if (socket != null) socket.close(); } catch (Exception ignored) {}
+        socket = null;
+        writer = null;
+        runOnUiThread(() -> {
+            connectButton.setEnabled(true);
+            stopButton.setEnabled(false);
+            testButton.setEnabled(true);
+        });
     }
 
     private synchronized void sendJson(String json) throws Exception {
@@ -352,7 +372,11 @@ public class MainActivity extends Activity {
         int observedExtranonce2Size = extranonce2Size;
         String observedExtranonce1 = extranonce1;
         byte[] extranonce2 = new byte[observedExtranonce2Size];
-        while (running.get() && authorized) {
+        while (running.get()) {
+            if (!authorized) {
+                try { Thread.sleep(150); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); break; }
+                continue;
+            }
             // Stratum may update extranonce parameters after subscription. Reset the counter
             // and rebuild the coinbase when those parameters change.
             if (observedExtranonce2Size != extranonce2Size || !observedExtranonce1.equals(extranonce1)) {
