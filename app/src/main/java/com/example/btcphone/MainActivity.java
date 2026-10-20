@@ -290,10 +290,6 @@ public class MainActivity extends Activity {
                                     + " | مجموع ردشده: " + rejected + "\n");
                             }
                         } else {
-                                rejected++;
-                                append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\n");
-                            }
-                        } else {
                             String method = msg.optString("method", "");
                             JSONArray params = msg.optJSONArray("params");
                             if ("mining.set_difficulty".equals(method) && params != null && params.length() > 0) {
