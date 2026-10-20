@@ -326,7 +326,8 @@ public class MainActivity extends Activity {
                         String note = submitted == 0
                             ? " | هنوز سهمی ارسال نشده؛ اتصال به‌تنهایی استخراج تأییدشده نیست"
                             : (accepted == 0 ? " | منتظر پاسخ استخر به سهم‌ها" : " | استخر سهم پذیرفته است");
-                        String shareWait = expectedShareTime(rate, shareDifficulty);\n                        append(String.format(Locale.US, "گزارش: هش %,d | سرعت %,.0f H/s | سختی %.0f | زمان متوسط سهم: %s | ارسال %d | قبول %d | رد %d | کار %s%s\\n", hashesDone, rate, shareDifficulty, shareWait, submitted, accepted, rejected, jobId, note));
+                        String shareWait = expectedShareTime(rate, shareDifficulty);
+                        append(String.format(Locale.US, "گزارش: هش %,d | سرعت %,.0f H/s | سختی %.0f | زمان متوسط سهم: %s | ارسال %d | قبول %d | رد %d | کار %s%s\n", hashesDone, rate, shareDifficulty, shareWait, submitted, accepted, rejected, jobId, note));
                     }
                 }
             }
@@ -402,7 +403,7 @@ public class MainActivity extends Activity {
                         String nonceHex = String.format(Locale.US, "%08x", nonce);
                         String en2 = bytesToHex(extranonce2);
                         int submitId = nextSubmitId++;
-                        String submit = "{\\"id\\":" + submitId + ",\\"method\\":\\"mining.submit\\",\\"params\\":[" 
+                        String submit = "{\"id\":" + submitId + ",\"method\":\"mining.submit\",\"params\":["
                             + JSONObject.quote(workerName) + "," + JSONObject.quote(job.id) + ","
                             + JSONObject.quote(en2) + "," + JSONObject.quote(job.ntime) + ","
                             + JSONObject.quote(nonceHex) + "]}";
