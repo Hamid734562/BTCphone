@@ -504,4 +504,29 @@ public class MainActivity extends Activity {
         authorized = false;
         currentJob = null;
         try { if (socket != null) socket.close(); } catch (Exception ignored) {}
-        try { stopService(new Intent(this, MiningForegroundService.class)); } catch (Excepti
+        try { stopService(new Intent(this, MiningForegroundService.class)); } catch (Exception ignored) {}
+        setStatus(reason);
+        append(reason + "\n");
+        connectButton.setEnabled(true);
+        stopButton.setEnabled(false);
+        testButton.setEnabled(true);
+    }
+
+    private void setStatus(String text) {
+        runOnUiThread(() -> status.setText("وضعیت: " + text));
+    }
+
+    private void append(String text) {
+        runOnUiThread(() -> {
+            String old = output.getText().toString();
+            if (old.length() > 5000) old = old.substring(old.length()-3000);
+            output.setText(old + text);
+        });
+    }
+
+    @Override
+    protected void onDestroy() {
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        super.onDestroy();
+    }
+}
