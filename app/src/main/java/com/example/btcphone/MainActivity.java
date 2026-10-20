@@ -378,14 +378,14 @@ public class MainActivity extends Activity {
                 byte[] header = buildHeader(job, extranonce2, 0);
                 boolean restart = false;
                 double difficultyUsed = shareDifficulty;
-                BigInteger target = targetForDifficulty(difficultyUsed);
+                byte[] targetBytes = targetBytesForDifficulty(difficultyUsed);
                 for (long nonce = 0; nonce < 100000L && running.get() && authorized; nonce++) {
                     if (currentJob != job) { restart = true; break; }
 
                     double currentDifficulty = shareDifficulty;
                     if (currentDifficulty != difficultyUsed) {
                         difficultyUsed = currentDifficulty;
-                        target = targetForDifficulty(difficultyUsed);
+                        targetBytes = targetBytesForDifficulty(difficultyUsed);
                     }
 
                     // Nonce is the final 4 bytes of the block header, little-endian.
@@ -398,8 +398,7 @@ public class MainActivity extends Activity {
                     byte[] hash = digest.digest(firstHash);
                     hashesDone++;
 
-                    BigInteger value = new BigInteger(1, reverse(hash));
-                    if (value.compareTo(target) <= 0) {
+                    if (hashMeetsTarget(hash, targetBytes)) {
                         String nonceHex = String.format(Locale.US, "%08x", nonce);
                         String en2 = bytesToHex(extranonce2);
                         int submitId = nextSubmitId++;
@@ -422,6 +421,28 @@ public class MainActivity extends Activity {
                 try { Thread.sleep(250); } catch (InterruptedException ignored) {}
             }
         }
+    }
+
+    private byte[] targetBytesForDifficulty(double difficulty) {
+        BigInteger target = targetForDifficulty(difficulty);
+        byte[] raw = target.toByteArray();
+        byte[] fixed = new byte[32];
+        int srcStart = Math.max(0, raw.length - 32);
+        int length = Math.min(32, raw.length);
+        System.arraycopy(raw, srcStart, fixed, 32 - length, length);
+        return fixed;
+    }
+
+    // SHA-256 digest bytes are compared as a little-endian Bitcoin hash,
+    // avoiding a reverse-array allocation and BigInteger construction per nonce.
+    private boolean hashMeetsTarget(byte[] hash, byte[] target) {
+        for (int i = 0; i < 32; i++) {
+            int hashByte = hash[31 - i] & 0xff;
+            int targetByte = target[i] & 0xff;
+            if (hashByte < targetByte) return true;
+            if (hashByte > targetByte) return false;
+        }
+        return true;
     }
 
     private BigInteger targetForDifficulty(double difficulty) {
