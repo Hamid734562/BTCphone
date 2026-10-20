@@ -426,7 +426,7 @@ public class MainActivity extends Activity {
                 StringBuilder en2 = new StringBuilder();
                 for (int i = 0; i < extranonce2Size; i++) en2.append("00");
                 int submitId = nextSubmitId++;
-                String submit = "{\\"id\\":" + submitId + ",\\"method\\":\\"mining.submit\\",\\"params\\":[" 
+                String submit = "{\"id\":" + submitId + ",\"method\":\"mining.submit\",\"params\":["
                     + JSONObject.quote(workerName) + "," + JSONObject.quote(job.id) + ","
                     + JSONObject.quote(en2.toString()) + "," + JSONObject.quote(job.ntime) + ","
                     + JSONObject.quote("ffffffff") + "]}";
