@@ -279,6 +279,18 @@ public class MainActivity extends Activity {
                                 double d = params.getDouble(0);
                                 if (d > 0 && Double.isFinite(d)) shareDifficulty = d;
                                 append("سختی سهم اعلام‌شده استخر: " + shareDifficulty + "\n");
+                            } else if ("mining.set_extranonce".equals(method) && params != null && params.length() >= 2) {
+                                String newExtranonce1 = params.getString(0);
+                                int newExtranonce2Size = params.getInt(1);
+                                if ((newExtranonce1.length() & 1) != 0 || newExtranonce2Size < 1 || newExtranonce2Size > 16) {
+                                    throw new Exception("پیام set_extranonce نامعتبر است");
+                                }
+                                // Validate that extranonce1 is hexadecimal before accepting it.
+                                hexToBytes(newExtranonce1);
+                                extranonce1 = newExtranonce1;
+                                extranonce2Size = newExtranonce2Size;
+                                currentJob = null;
+                                append("پارامترهای extranonce از استخر به‌روزرسانی شد؛ منتظر کار جدید هستیم.\\n");
                             } else if ("mining.notify".equals(method) && params != null && params.length() >= 9) {
                                 String[] branches = new String[params.getJSONArray(4).length()];
                                 JSONArray b = params.getJSONArray(4);
@@ -337,8 +349,17 @@ public class MainActivity extends Activity {
     }
 
     private void miningLoop() {
-        byte[] extranonce2 = new byte[extranonce2Size];
+        int observedExtranonce2Size = extranonce2Size;
+        String observedExtranonce1 = extranonce1;
+        byte[] extranonce2 = new byte[observedExtranonce2Size];
         while (running.get() && authorized) {
+            // Stratum may update extranonce parameters after subscription. Reset the counter
+            // and rebuild the coinbase when those parameters change.
+            if (observedExtranonce2Size != extranonce2Size || !observedExtranonce1.equals(extranonce1)) {
+                observedExtranonce2Size = extranonce2Size;
+                observedExtranonce1 = extranonce1;
+                extranonce2 = new byte[observedExtranonce2Size];
+            }
             Job job = currentJob;
             if (job == null) {
                 try { Thread.sleep(150); } catch (InterruptedException ignored) {}
@@ -348,7 +369,8 @@ public class MainActivity extends Activity {
                 boolean restart = false;
                 // The coinbase/merkle root stays the same for this extranonce2 batch.
                 // Compute it once instead of recalculating it for every nonce.
-                byte[] merkleRoot = buildMerkleRoot(job, extranonce2);
+                String batchExtranonce1 = observedExtranonce1;
+                byte[] merkleRoot = buildMerkleRoot(job, extranonce2, batchExtranonce1);
                 double batchDifficulty = shareDifficulty;
                 BigInteger target = new BigDecimal(DIFF1_TARGET)
                     .divide(BigDecimal.valueOf(Math.max(batchDifficulty, 0.00000001)), 0, RoundingMode.DOWN)
@@ -387,8 +409,8 @@ public class MainActivity extends Activity {
         }
     }
 
-    private byte[] buildMerkleRoot(Job job, byte[] extranonce2) throws Exception {
-        byte[] coinbase = hexToBytes(job.coinb1 + extranonce1 + bytesToHex(extranonce2) + job.coinb2);
+    private byte[] buildMerkleRoot(Job job, byte[] extranonce2, String batchExtranonce1) throws Exception {
+        byte[] coinbase = hexToBytes(job.coinb1 + batchExtranonce1 + bytesToHex(extranonce2) + job.coinb2);
         byte[] merkle = doubleSha(coinbase);
         for (String branch : job.branches) merkle = doubleSha(concat(merkle, hexToBytes(branch)));
         return merkle;
