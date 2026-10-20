@@ -296,16 +296,25 @@ public class MainActivity extends Activity {
                                 double d = params.getDouble(0);
                                 if (d > 0 && Double.isFinite(d)) shareDifficulty = d;
                                 append("سختی سهم اعلام‌شده استخر: " + shareDifficulty + "\n");
-                            } else if ("mining.notify".equals(method) && params != null && params.length() >= 9) {
-                                String[] branches = new String[params.getJSONArray(4).length()];
-                                JSONArray b = params.getJSONArray(4);
-                                for (int i = 0; i < b.length(); i++) branches[i] = b.getString(i);
-                                Job job = new Job(params.getString(0), params.getString(1), params.getString(2),
-                                    params.getString(3), branches, params.getString(5), params.getString(6),
-                                    params.getString(7), params.getBoolean(8));
-                                currentJob = job;
-                                append("کار جدید استخر دریافت شد: " + job.id + "\n");
-                                setStatus("کار استخر دریافت شد؛ آماده محاسبه");
+                            } else if ("mining.notify".equals(method)) {
+                                if (params == null || params.length() < 9) {
+                                    append("هشدار: پیام mining.notify ناقص است؛ تعداد پارامترها="
+                                        + (params == null ? 0 : params.length()) + " | پیام=" + msg + "\n");
+                                } else {
+                                    JSONArray b = params.getJSONArray(4);
+                                    String[] branches = new String[b.length()];
+                                    for (int i = 0; i < b.length(); i++) branches[i] = b.getString(i);
+                                    Job job = new Job(params.getString(0), params.getString(1), params.getString(2),
+                                        params.getString(3), branches, params.getString(5), params.getString(6),
+                                        params.getString(7), params.getBoolean(8));
+                                    currentJob = job;
+                                    append("کار جدید استخر دریافت شد: " + job.id
+                                        + " | شاخه‌های Merkle: " + branches.length
+                                        + " | clean=" + job.clean + "\n");
+                                    setStatus("کار استخر دریافت شد؛ شناسه=" + job.id);
+                                }
+                            } else if (!method.isEmpty()) {
+                                append("پیام استخر دریافت شد: " + method + " | " + msg + "\n");
                             }
                         }
                     } catch (Exception parseError) {
@@ -578,7 +587,7 @@ public class MainActivity extends Activity {
             StringBuilder recent = new StringBuilder();
             int first = Math.max(0, lines.length - 45);
             for (int i = first; i < lines.length; i++) {
-                if (!lines[i].isEmpty()) recent.append(lines[i]).append("\\n");
+                if (!lines[i].isEmpty()) recent.append(lines[i]).append("\n");
             }
             output.setText(recent.toString());
         });
