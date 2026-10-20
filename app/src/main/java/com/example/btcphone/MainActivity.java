@@ -185,6 +185,19 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "شماره درگاه معتبر نیست.", Toast.LENGTH_LONG).show();
             return;
         }
+        try {
+            String actualHash = bytesToHex(doubleSha(new byte[0]));
+            String expectedHash = "5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456";
+            if (!expectedHash.equals(actualHash)) {
+                append("آزمون صحت SHA-256 دوگانه ناموفق است؛ اتصال شروع نشد. خروجی: " + actualHash + "\n");
+                Toast.makeText(this, "آزمون داخلی هش ناموفق بود.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            append("آزمون داخلی SHA-256 دوگانه موفق شد. این آزمون فقط تابع هش را بررسی می‌کند، نه کل هدر استخراج.\n");
+        } catch (Exception e) {
+            append("خطا در آزمون داخلی هش: " + e.getMessage() + "\n");
+            return;
+        }
         workerName = worker;
         Intent serviceIntent = new Intent(this, MiningForegroundService.class);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent);
@@ -263,10 +276,20 @@ public class MainActivity extends Activity {
                             }
                         } else if (idObj instanceof Number && ((Number) idObj).intValue() >= 100) {
                             boolean ok = msg.optBoolean("result", false);
+                            Object poolError = msg.opt("error");
                             if (ok) {
                                 accepted++;
-                                append("استخر سهم را پذیرفت. مجموع پذیرفته‌شده: " + accepted + "\n");
+                                append("پاسخ استخر به سهم: پذیرفته شد. شناسه پاسخ=" + idObj
+                                    + " | مجموع پذیرفته‌شده: " + accepted + "\n");
                             } else {
+                                rejected++;
+                                String detail = (poolError == null || poolError == JSONObject.NULL)
+                                    ? msg.toString() : String.valueOf(poolError);
+                                append("پاسخ استخر به سهم: رد شد. شناسه پاسخ=" + idObj
+                                    + " | دلیل/خطای استخر: " + detail
+                                    + " | مجموع ردشده: " + rejected + "\n");
+                            }
+                        } else {
                                 rejected++;
                                 append("استخر سهم را رد کرد. مجموع ردشده: " + rejected + "\n");
                             }
@@ -485,29 +508,4 @@ public class MainActivity extends Activity {
         authorized = false;
         currentJob = null;
         try { if (socket != null) socket.close(); } catch (Exception ignored) {}
-        try { stopService(new Intent(this, MiningForegroundService.class)); } catch (Exception ignored) {}
-        setStatus(reason);
-        append(reason + "\n");
-        connectButton.setEnabled(true);
-        stopButton.setEnabled(false);
-        testButton.setEnabled(true);
-    }
-
-    private void setStatus(String text) {
-        runOnUiThread(() -> status.setText("وضعیت: " + text));
-    }
-
-    private void append(String text) {
-        runOnUiThread(() -> {
-            String old = output.getText().toString();
-            if (old.length() > 5000) old = old.substring(old.length()-3000);
-            output.setText(old + text);
-        });
-    }
-
-    @Override
-    protected void onDestroy() {
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        super.onDestroy();
-    }
-}
+        try { stopService(new Intent(this, MiningForegroundService.class)); } catch (Excepti
