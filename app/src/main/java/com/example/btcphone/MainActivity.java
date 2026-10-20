@@ -38,7 +38,7 @@ import javax.net.ssl.SSLParameters;
 public class MainActivity extends Activity {
     private EditText hostInput, portInput, workerInput, passwordInput;
     private CheckBox tlsCheck;
-    private Button connectButton, stopButton, testButton;
+    private Button connectButton, stopButton, testButton, probeButton;
     private TextView status, output;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
     private volatile long startTime = 0;
     private volatile int nextSubmitId = 100;
     private volatile boolean authorized = false;
+    private volatile boolean probeSent = false;
     private volatile String latestStatus = "آماده";
     private Thread networkThread;
     private Thread miningThread;
@@ -133,6 +134,11 @@ public class MainActivity extends Activity {
         stopButton.setEnabled(false);
         root.addView(stopButton);
 
+        probeButton = new Button(this);
+        probeButton.setText("آزمون پاسخ استخر: ارسال یک سهم آزمایشی نامعتبر");
+        probeButton.setEnabled(false);
+        root.addView(probeButton);
+
         testButton = new Button(this);
         testButton.setText("اجرای آزمایش محلی ۵ مرحله‌ای");
         root.addView(testButton);
@@ -153,6 +159,7 @@ public class MainActivity extends Activity {
 
         connectButton.setOnClickListener(v -> startMining());
         stopButton.setOnClickListener(v -> stopMining("به درخواست کاربر متوقف شد."));
+        probeButton.setOnClickListener(v -> confirmDiagnosticShare());
         testButton.setOnClickListener(v -> runLocalBenchmark());
         scroll.addView(root);
         setContentView(scroll);
@@ -224,6 +231,8 @@ public class MainActivity extends Activity {
         else startService(serviceIntent);
         running.set(true);
         authorized = false;
+        probeSent = false;
+        probeButton.setEnabled(false);
         hashesDone = 0;
         submitted = 0;
         accepted = 0;
@@ -290,6 +299,7 @@ public class MainActivity extends Activity {
                             startTime = System.nanoTime();
                             setStatus("متصل و مجاز؛ منتظر کار استخر");
                             append("احراز هویت موفق شد؛ نام Worker ارسالی: " + worker + "\n" + "توجه: بعضی استخرها تا دریافت اولین سهم معتبر، Worker را در داشبورد نشان نمی‌دهند.\n" + "منتظر mining.notify هستیم.\n");
+                            runOnUiThread(() -> probeButton.setEnabled(!probeSent));
                             if (miningThread == null || !miningThread.isAlive()) {
                                 miningThread = new Thread(this::miningLoop, "BTCPhone-miner");
                                 miningThread.start();
@@ -382,9 +392,51 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 connectButton.setEnabled(true);
                 stopButton.setEnabled(false);
+                probeButton.setEnabled(false);
                 testButton.setEnabled(true);
             });
         }
+    }
+
+    private void confirmDiagnosticShare() {
+        if (!running.get() || !authorized || currentJob == null) {
+            Toast.makeText(this, "اول باید به استخر وصل و مجاز شوی و کار دریافت کنی.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (probeSent) {
+            Toast.makeText(this, "آزمون آزمایشی این اتصال قبلاً ارسال شده است.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("آزمون ارتباط با استخر")
+            .setMessage("یک پیام mining.submit با nonce آزمایشی ارسال می‌شود که عمداً اعتبارسنجی نشده و به احتمال بسیار زیاد رد می‌شود. این کار فقط مسیر ارسال و پاسخ استخر را آزمایش می‌کند؛ سهم معتبر یا درآمد ایجاد نمی‌کند. فقط یک بار در هر اتصال انجام می‌شود. ادامه بدهیم؟")
+            .setNegativeButton("لغو", (dialog, which) -> {})
+            .setPositiveButton("ارسال آزمون", (dialog, which) -> sendDiagnosticShareOnce())
+            .show();
+    }
+
+    private void sendDiagnosticShareOnce() {
+        if (!running.get() || !authorized || currentJob == null || probeSent) return;
+        probeSent = true;
+        runOnUiThread(() -> probeButton.setEnabled(false));
+        new Thread(() -> {
+            try {
+                Job job = currentJob;
+                if (job == null || !authorized || !running.get()) throw new Exception("اتصال یا کار استخر دیگر فعال نیست");
+                StringBuilder en2 = new StringBuilder();
+                for (int i = 0; i < extranonce2Size; i++) en2.append("00");
+                int submitId = nextSubmitId++;
+                String submit = "{\\"id\\":" + submitId + ",\\"method\\":\\"mining.submit\\",\\"params\\":[" 
+                    + JSONObject.quote(workerName) + "," + JSONObject.quote(job.id) + ","
+                    + JSONObject.quote(en2.toString()) + "," + JSONObject.quote(job.ntime) + ","
+                    + JSONObject.quote("ffffffff") + "]}";
+                sendJson(submit);
+                submitted++;
+                append("آزمون تشخیصی ارسال شد (nonce=ffffffff؛ عمداً بدون تأیید هش). این مورد سهم استخراج‌شده نیست؛ منتظر پاسخ استخر با شناسه " + submitId + " هستیم.\n");
+            } catch (Exception e) {
+                append("ارسال آزمون تشخیصی ناموفق بود: " + e.getMessage() + "\n");
+            }
+        }, "BTCPhone-share-probe").start();
     }
 
     private synchronized void sendJson(String json) throws Exception {
@@ -602,6 +654,7 @@ public class MainActivity extends Activity {
         append(reason + "\n");
         connectButton.setEnabled(true);
         stopButton.setEnabled(false);
+        probeButton.setEnabled(false);
         testButton.setEnabled(true);
     }
 
