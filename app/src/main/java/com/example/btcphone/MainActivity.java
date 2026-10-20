@@ -326,7 +326,7 @@ public class MainActivity extends Activity {
                         String note = submitted == 0
                             ? " | هنوز سهمی ارسال نشده؛ اتصال به‌تنهایی استخراج تأییدشده نیست"
                             : (accepted == 0 ? " | منتظر پاسخ استخر به سهم‌ها" : " | استخر سهم پذیرفته است");
-                        append(String.format(Locale.US, "گزارش: هش %,d | سرعت %,.0f H/s | سختی %.0f | ارسال %d | قبول %d | رد %d | کار %s%s\n", hashesDone, rate, shareDifficulty, submitted, accepted, rejected, jobId, note));
+                        String shareWait = expectedShareTime(rate, shareDifficulty);\n                        append(String.format(Locale.US, "گزارش: هش %,d | سرعت %,.0f H/s | سختی %.0f | زمان متوسط سهم: %s | ارسال %d | قبول %d | رد %d | کار %s%s\\n", hashesDone, rate, shareDifficulty, shareWait, submitted, accepted, rejected, jobId, note));
                     }
                 }
             }
