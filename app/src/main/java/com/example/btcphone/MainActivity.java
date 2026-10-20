@@ -401,7 +401,7 @@ public class MainActivity extends Activity {
                     .toBigInteger();
                 boolean everyHashQualifies = target.bitLength() > 256;
                 byte[] targetBytes = everyHashQualifies ? null : toFixed32(target);
-                // Build the 80-byte header once per batch; only its 4-byte nonce changes.
+                // Performance: reuse the 80-byte header and update only the 4-byte nonce each iteration.
                 byte[] header = buildHeader(job, merkleRoot, 0);
                 for (long nonce = 0; nonce < 100000L && running.get() && authorized; nonce++) {
                     if (currentJob != job || Double.compare(shareDifficulty, batchDifficulty) != 0) {
