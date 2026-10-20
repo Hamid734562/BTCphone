@@ -521,9 +521,14 @@ public class MainActivity extends Activity {
 
     private void append(String text) {
         runOnUiThread(() -> {
-            String old = output.getText().toString();
-            if (old.length() > 5000) old = old.substring(old.length()-3000);
-            output.setText(old + text);
+            String combined = output.getText().toString() + text;
+            String[] lines = combined.split("\\n");
+            StringBuilder recent = new StringBuilder();
+            int first = Math.max(0, lines.length - 45);
+            for (int i = first; i < lines.length; i++) {
+                if (!lines[i].isEmpty()) recent.append(lines[i]).append("\\n");
+            }
+            output.setText(recent.toString());
         });
     }
 
