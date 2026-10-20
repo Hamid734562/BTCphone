@@ -316,6 +316,14 @@ public class MainActivity extends Activity {
                                 double d = params.getDouble(0);
                                 if (d > 0 && Double.isFinite(d)) shareDifficulty = d;
                                 append("سختی سهم اعلام‌شده استخر: " + shareDifficulty + "\n");
+                                double elapsed = startTime > 0 ? (System.nanoTime() - startTime) / 1_000_000_000.0 : 0;
+                                double observedRate = elapsed > 0 ? hashesDone / elapsed : 0;
+                                if (observedRate > 0) {
+                                    append("برآورد نظری زمان سهم با سرعت فعلی: " + expectedShareTime(observedRate, shareDifficulty) + "\n");
+                                    if (shareDifficulty >= 1000 && observedRate < 10000000) {
+                                        append("هشدار: سختی سهم برای هش‌ریت فعلی گوشی بسیار بالاست؛ صفر ماندن ارسال قابل انتظار است. دریافت کار جدید به معنی ارسال سهم نیست.\n");
+                                    }
+                                }
                             } else if ("mining.notify".equals(method)) {
                                 if (params == null || params.length() < 9) {
                                     append("هشدار: پیام mining.notify ناقص است؛ تعداد پارامترها="
